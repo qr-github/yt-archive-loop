@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <title>YouTube ライブアーカイブ ループ再生</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body>
+
+        <h2>動画リンク</h2>
+        <input id="videoUrl" type="text" style="width:600px" placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
+
+        <h2>ループ区間（st,end 秒で1行ずつ）</h2>
+        <textarea id="sections" rows="5" cols="60" placeholder="例：30,50"></textarea>
+
+        <h2>再生設定</h2>
+        <label>
+        <input type="checkbox" id="playAll" checked>
+        複数区間を順番に再生
+        </label><br>
+        単一区間番号：
+        <input id="singleIndex" type="number" value="1" min="1"><br><br>
+
+        <button onclick="start()">再生開始</button>
+
+        <hr>
+        <div id="player"></div>
+
+        <script src="https://www.youtube.com/iframe_api"></script>
+        <script>
+            let player = null;
+            let apiReady = false;
+            let pendingVideoId = null;
+
+            let sections = [];
+            let currentIndex = 0;
+            let playAll = true;
+            let intervalId = null;
+
+            /* ===== API準備完了（関数名は固定） ===== */
+            function onYouTubeIframeAPIReady(){
+                apiReady = true;
+                if(pendingVideoId){
+                    loadPlayer(pendingVideoId);
+                    pendingVideoId = null;
+                }
+            }
+
+            /* ===== URL → VIDEO_ID 抽出 ===== */
+            function extractVideoId(url){
+                const patterns = [
+                    /v=([^&]+)/,
+                    /youtu\.be\/([^?&]+)/,
+                    /\/live\/([^?&]+)/,
+                    /\/embed\/([^?&]+)/
+                ];
+                for(const p of patterns){
+                    const m = url.match(p);
+                    if(m && m[1]) return m[1];
+                }
+                return null;
+            }
+
+            /* ===== 再生開始 ===== */
+            function start(){
+                const url = document.getElementById("videoUrl").value.trim();
+                const videoId = extractVideoId(url);
+                if(!videoId){
+                    alert("URLが正しくありません");
+                    return;
+                }
+
+                sections = document.getElementById("sections").value
+                    .trim().split("\n")
+                    .map(line=>{
+                        const [s,e] = line.split(",").map(Number);
+                        return {start:s, end:e};
+                    })
+                    .filter(v=>!isNaN(v.start)&&!isNaN(v.end)&&v.end>v.start);
+
+                if(!sections.length){
+                    alert("ループ区間を入力してください");
+                    return;
+                }
+
+                playAll = document.getElementById("playAll").checked;
+                const singleIndex = Number(document.getElementById("singleIndex").value);
+                currentIndex = playAll ? 0 : Math.max(0, singleIndex-1);
+
+                if(player){
+                    player.loadVideoById({
+                        videoId: videoId,
+                        startSeconds: sections[currentIndex].start
+                    });
+                }else{
+                    if(!apiReady){
+                        pendingVideoId = videoId;
+                        alert("API準備中です。数秒待って再度押してください。");
+                    }else{
+                        loadPlayer(videoId);
+                    }
+                }
+            }
+
+            /* ===== プレイヤー生成 ===== */
+            function loadPlayer(videoId){
+                player = new YT.Player("player", {
+                    videoId: videoId,
+                    playerVars: {
+                        autoplay: 1,
+                        controls: 1
+                    },
+                    events: {
+                        onReady: onPlayerReady
+                    }
+                });
+            }
+
+            /* ===== プレイヤー準備完了 ===== */
+            function onPlayerReady(){
+                const s = sections[currentIndex];
+                player.seekTo(s.start, true);
+                player.playVideo();
+
+                if(intervalId) clearInterval(intervalId);
+                intervalId = setInterval(checkLoop, 200);
+            }
+
+            /* ===== ループ監視 ===== */
+            function checkLoop(){
+                if(!player || !sections.length) return;
+
+                const state = player.getPlayerState();
+                if(state !== YT.PlayerState.PLAYING) return;
+
+                const s = sections[currentIndex];
+                const t = player.getCurrentTime();
+
+                if(t >= s.end){
+                    if(playAll){
+                        currentIndex = (currentIndex + 1) % sections.length;
+                    }
+                    player.seekTo(sections[currentIndex].start, true);
+                }
+            }
+        </script>
+        <h2>hh:mm:ssを秒に変換するツール</h2>
+        <input id="timeInput" type="text" placeholder="hh:mm:ss または mm:ss">
+        <button onclick="convertToSeconds()">変更</button>
+        <br>
+        <span id="converted">0 秒</span>
+        <button onclick="copySeconds()">コピー</button>
+
+        <script>
+            function convertToSeconds(){
+                const input = document.getElementById("timeInput").value.trim();
+                const parts = input.split(":").map(Number);
+                if(parts.some(isNaN) || (parts.length !== 2 && parts.length !== 3)){
+                    document.getElementById("converted").innerText = "形式が正しくありません"; return; }
+                    let total = 0;
+                    if(parts.length === 2){
+                        //mm:ss
+                        total = parts[0]*60 + parts[1];
+                    }else if(parts.length === 3){
+                        //hh:mm:ss
+                        total = parts[0]*3600 + parts[1]*60 + parts[2];
+                    }
+                    document.getElementById("converted").innerText = total + " 秒";
+                    }
+
+                    //変換結果をコピー
+                    function copySeconds(){
+                        const text = document.getElementById("converted").innerText.replace(" 秒","");
+                        navigator.clipboard.writeText(text).then(()=>{
+                            alert(text + " copied");
+                        }).catch(()=>{
+                            alert("failed!");
+                        });
+                    }
+            </script>
+            <hr style="color: gray">
+
+            <h2>サイト内クリップボード</h2>
+
+            <textarea
+                id="siteClipboard"
+                rows="6"
+                cols="80"
+                placeholder="ここに一時保存したいテキストを書いてください"
+            ></textarea>
+            <br>
+
+            <button onclick="copySiteClipboard()">コピー</button>
+            <span id="copyStatus"></span>
+
+            <script>
+                function copySiteClipboard(){
+                    const textarea = document.getElementById("siteClipboard");
+                    const status = document.getElementById("copyStatus");
+
+                    if(!textarea.value){
+                        status.innerText = "コピーする内容がありません";
+                        return;
+                    }
+
+                    navigator.clipboard.writeText(textarea.value)
+                        .then(() => {
+                            status.innerText = "コピーしました";
+                            setTimeout(() => status.innerText = "", 1500);
+                        })
+                        .catch(() => {
+                            status.innerText = "コピーに失敗しました";
+                        });
+                }
+            </script>
+
+
+    </body>
+</html>

@@ -23,7 +23,10 @@
         </div>
     </div>
 
-    <button onclick="addUnit()">＋ 動画を追加</button>
+    <button onclick="addUnit()">動画を追加</button>
+    <button onclick="saveConfig()">↑ 設定を保存</button>
+    <button onclick="document.getElementById('loadFile').click()">↓ 設定を読込</button>
+    <input type="file" id="loadFile" style="display:none" accept=".json" onchange="loadConfig(event)">
     <br><br>
 
     <label><input type="checkbox" id="playAll" checked> 全区間を順番にループ再生</label><br>
@@ -43,19 +46,19 @@
         function onYouTubeIframeAPIReady() { apiReady = true; }
 
         // 入力枠の追加
-        function addUnit() {
-            const id = "unit" + Date.now();
-            const html = `
-                <div class="video-unit" id="${id}">
-                    <span class="remove-btn" onclick="removeUnit('${id}')">✕ 削除</span>
-                    <div>動画URL: <input type="text" class="v-url" style="width:400px"></div>
-                    <div style="margin-top:5px;">
-                        ループ区間:<br>
-                        <textarea class="v-sections" rows="3" cols="60"></textarea>
-                    </div>
-                </div>`;
-            document.getElementById("videoUnits").insertAdjacentHTML('beforeend', html);
-        }
+        function addUnit(url = "", sections = "") {
+        const id = "unit" + Date.now() + Math.random().toString(36).substring(2,9);
+        const html = `
+            <div class="video-unit" id="${id}">
+                <span class="remove-btn" onclick="removeUnit('${id}')">✕ 削除</span>
+                <div>動画URL: <input type="text" class="v-url" style="width:400px" value="${url}"></div>
+                <div style="margin-top:5px;">
+                    ループ区間:<br>
+                    <textarea class="v-sections" rows="3" cols="60">${sections}</textarea>
+                </div>
+            </div>`;
+        document.getElementById("videoUnits").insertAdjacentHTML('beforeend', html);
+}
 
         function removeUnit(id) {
             if(document.querySelectorAll('.video-unit').length > 1) {
@@ -135,6 +138,40 @@
                 }
             }
         }
+
+            // 設定をJSONとしてダウンロード
+    function saveConfig() {
+        const data = [];
+        document.querySelectorAll('.video-unit').forEach(unit => {
+            data.push({
+                url: unit.querySelector('.v-url').value,
+                sections: unit.querySelector('.v-sections').value
+            });
+        });
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `yt_loop_config.json`;
+        a.click();
+    }
+
+    // ファイルを読み込んで入力欄を再生成
+    function loadConfig(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (!Array.isArray(data)) return;
+                document.getElementById("videoUnits").innerHTML = ""; // 既存の入力を全削除
+                data.forEach(item => addUnit(item.url, item.sections)); // 保存データ分だけ作成
+            } catch (err) {
+                alert("ファイルの読み込みに失敗しました");
+            }
+        };
+        reader.readAsText(file);
+}
     </script>
 
     <h2>hh:mm:ssを秒に変換するツール</h2>

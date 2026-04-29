@@ -1,150 +1,143 @@
 <!DOCTYPE html>
 <html lang="ja">
-    <head>
-        <meta charset="UTF-8">
-        <title>YouTube ライブアーカイブ ループ再生</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-    </head>
-    <body>
+<head>
+    <meta charset="UTF-8">
+    <title>YouTube 複数動画ループ再生</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        .video-unit { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; background: #f9f9f9; }
+        .remove-btn { color: red; cursor: pointer; float: right; }
+    </style>
+</head>
+<body>
 
-        <h2>動画リンク</h2>
-        <input id="videoUrl" type="text" style="width:600px" placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
+    <h2>再生リスト設定</h2>
+    <div id="videoUnits">
+        <div class="video-unit" id="unit0">
+            <span class="remove-btn" onclick="removeUnit('unit0')">✕ 削除</span>
+            <div>動画URL: <input type="text" class="v-url" style="width:400px" placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX"></div>
+            <div style="margin-top:5px;">
+                ループ区間（st,end 秒で1行ずつ）:<br>
+                <textarea class="v-sections" rows="3" cols="60" placeholder="30,50"></textarea>
+            </div>
+        </div>
+    </div>
 
-        <h2>ループ区間（st,end 秒で1行ずつ）</h2>
-        <textarea id="sections" rows="5" cols="60" placeholder="例：30,50"></textarea>
+    <button onclick="addUnit()">＋ 動画を追加</button>
+    <br><br>
 
-        <h2>再生設定</h2>
-        <label>
-        <input type="checkbox" id="playAll" checked>
-        複数区間を順番に再生
-        </label><br>
-        単一区間番号：
-        <input id="singleIndex" type="number" value="1" min="1"><br><br>
+    <label><input type="checkbox" id="playAll" checked> 全区間を順番にループ再生</label><br>
+    <button onclick="start()" style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer;">再生開始</button>
 
-        <button onclick="start()">再生開始</button>
+    <hr>
+    <div id="player"></div>
 
-        <hr>
-        <div id="player"></div>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player = null;
+        let apiReady = false;
+        let allSections = []; // {videoId, start, end} のフラットな配列にする
+        let currentIndex = 0;
+        let intervalId = null;
 
-        <script src="https://www.youtube.com/iframe_api"></script>
-        <script>
-            let player = null;
-            let apiReady = false;
-            let pendingVideoId = null;
+        function onYouTubeIframeAPIReady() { apiReady = true; }
 
-            let sections = [];
-            let currentIndex = 0;
-            let playAll = true;
-            let intervalId = null;
+        // 入力枠の追加
+        function addUnit() {
+            const id = "unit" + Date.now();
+            const html = `
+                <div class="video-unit" id="${id}">
+                    <span class="remove-btn" onclick="removeUnit('${id}')">✕ 削除</span>
+                    <div>動画URL: <input type="text" class="v-url" style="width:400px"></div>
+                    <div style="margin-top:5px;">
+                        ループ区間:<br>
+                        <textarea class="v-sections" rows="3" cols="60"></textarea>
+                    </div>
+                </div>`;
+            document.getElementById("videoUnits").insertAdjacentHTML('beforeend', html);
+        }
 
-            /* ===== API準備完了（関数名は固定） ===== */
-            function onYouTubeIframeAPIReady(){
-                apiReady = true;
-                if(pendingVideoId){
-                    loadPlayer(pendingVideoId);
-                    pendingVideoId = null;
-                }
+        function removeUnit(id) {
+            if(document.querySelectorAll('.video-unit').length > 1) {
+                document.getElementById(id).remove();
             }
+        }
 
-            /* ===== URL → VIDEO_ID 抽出 ===== */
-            function extractVideoId(url){
-                const patterns = [
-                    /v=([^&]+)/,
-                    /youtu\.be\/([^?&]+)/,
-                    /\/live\/([^?&]+)/,
-                    /\/embed\/([^?&]+)/
-                ];
-                for(const p of patterns){
-                    const m = url.match(p);
-                    if(m && m[1]) return m[1];
-                }
-                return null;
+        function extractVideoId(url){
+            const patterns = [/v=([^&]+)/, /youtu\.be\/([^?&]+)/, /\/live\/([^?&]+)/, /\/embed\/([^?&]+)/];
+            for(const p of patterns){
+                const m = url.match(p);
+                if(m && m[1]) return m[1];
             }
+            return null;
+        }
 
-            /* ===== 再生開始 ===== */
-            function start(){
-                const url = document.getElementById("videoUrl").value.trim();
-                const videoId = extractVideoId(url);
-                if(!videoId){
-                    alert("URLが正しくありません");
-                    return;
-                }
+        function start(){
+            allSections = [];
+            const units = document.querySelectorAll('.video-unit');
 
-                sections = document.getElementById("sections").value
-                    .trim().split("\n")
-                    .map(line=>{
-                        const [s,e] = line.split(",").map(Number);
-                        return {start:s, end:e};
-                    })
-                    .filter(v=>!isNaN(v.start)&&!isNaN(v.end)&&v.end>v.start);
+            units.forEach(unit => {
+                const url = unit.querySelector('.v-url').value.trim();
+                const vId = extractVideoId(url);
+                if(!vId) return;
 
-                if(!sections.length){
-                    alert("ループ区間を入力してください");
-                    return;
-                }
-
-                playAll = document.getElementById("playAll").checked;
-                const singleIndex = Number(document.getElementById("singleIndex").value);
-                currentIndex = playAll ? 0 : Math.max(0, singleIndex-1);
-
-                if(player){
-                    player.loadVideoById({
-                        videoId: videoId,
-                        startSeconds: sections[currentIndex].start
-                    });
-                }else{
-                    if(!apiReady){
-                        pendingVideoId = videoId;
-                        alert("API準備中です。数秒待って再度押してください。");
-                    }else{
-                        loadPlayer(videoId);
-                    }
-                }
-            }
-
-            /* ===== プレイヤー生成 ===== */
-            function loadPlayer(videoId){
-                player = new YT.Player("player", {
-                    videoId: videoId,
-                    playerVars: {
-                        autoplay: 1,
-                        controls: 1
-                    },
-                    events: {
-                        onReady: onPlayerReady
+                const lines = unit.querySelector('.v-sections').value.trim().split("\n");
+                lines.forEach(line => {
+                    const [s, e] = line.split(",").map(Number);
+                    if(!isNaN(s) && !isNaN(e) && e > s) {
+                        allSections.push({ videoId: vId, start: s, end: e });
                     }
                 });
+            });
+
+            if(!allSections.length) {
+                alert("有効な動画URLと区間を入力してください");
+                return;
             }
 
-            /* ===== プレイヤー準備完了 ===== */
-            function onPlayerReady(){
-                const s = sections[currentIndex];
-                player.seekTo(s.start, true);
-                player.playVideo();
+            currentIndex = 0;
+            const first = allSections[currentIndex];
 
-                if(intervalId) clearInterval(intervalId);
-                intervalId = setInterval(checkLoop, 200);
+            if(player) {
+                player.loadVideoById({ videoId: first.videoId, startSeconds: first.start });
+            } else {
+                if(!apiReady) return alert("API準備中...");
+                player = new YT.Player("player", {
+                    videoId: first.videoId,
+                    playerVars: { autoplay: 1, controls: 1 },
+                    events: { onReady: () => { 
+                        player.seekTo(first.start, true);
+                        if(intervalId) clearInterval(intervalId);
+                        intervalId = setInterval(checkLoop, 200);
+                    }}
+                });
             }
+        }
 
-            /* ===== ループ監視 ===== */
-            function checkLoop(){
-                if(!player || !sections.length) return;
+        function checkLoop(){
+            if(!player || !allSections.length) return;
+            if(player.getPlayerState() !== YT.PlayerState.PLAYING) return;
 
-                const state = player.getPlayerState();
-                if(state !== YT.PlayerState.PLAYING) return;
+            const s = allSections[currentIndex];
+            const t = player.getCurrentTime();
 
-                const s = sections[currentIndex];
-                const t = player.getCurrentTime();
+            if(t >= s.end){
+                const oldId = s.videoId;
+                if(document.getElementById("playAll").checked) {
+                    currentIndex = (currentIndex + 1) % allSections.length;
+                }
+                const next = allSections[currentIndex];
 
-                if(t >= s.end){
-                    if(playAll){
-                        currentIndex = (currentIndex + 1) % sections.length;
-                    }
-                    player.seekTo(sections[currentIndex].start, true);
+                if(next.videoId === oldId) {
+                    player.seekTo(next.start, true);
+                } else {
+                    player.loadVideoById({ videoId: next.videoId, startSeconds: next.start });
                 }
             }
-        </script>
-        <h2>hh:mm:ssを秒に変換するツール</h2>
+        }
+    </script>
+
+    <h2>hh:mm:ssを秒に変換するツール</h2>
         <input id="timeInput" type="text" placeholder="hh:mm:ss または mm:ss">
         <button onclick="convertToSeconds()">変更</button>
         <br>
@@ -213,7 +206,5 @@
                         });
                 }
             </script>
-
-
-    </body>
+</body>
 </html>

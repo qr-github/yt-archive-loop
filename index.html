@@ -175,6 +175,7 @@
     </script>
 
     <h2>hh:mm:ssを秒に変換するツール</h2>
+        <div id="toast" style="display:none; position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#F7F7F7; padding:10px 20px; border-radius:5px; z-index:9999;"></div>
         <input id="timeInput" type="text" placeholder="hh:mm:ss または mm:ss">
         <button onclick="convertToSeconds()">変更</button>
         <br>
@@ -202,10 +203,20 @@
                     function copySeconds(){
                         const text = document.getElementById("converted").innerText.replace(" 秒","");
                         navigator.clipboard.writeText(text).then(()=>{
-                            alert(text + " copied");
+                            showStatues(text + " copied");
                         }).catch(()=>{
                             alert("failed!");
                         });
+                    }
+
+                    function showStatues(message){
+                        const toast = document.getElementById("toast");
+                        toast.innerText = message;
+                        toast.style.display = "block";
+
+                        setTimeout(()=>{
+                            toast.style.display = "none";
+                        }, 500);
                     }
             </script>
             <hr style="color: gray">

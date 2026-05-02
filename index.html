@@ -147,7 +147,7 @@
             const sections = unit.querySelector('.v-sections').value.trim();
 
             if(!url && !sections){
-                showStatues("空のフォームがあります");
+                //showStatues("空のフォームがあります");
                 return;
             }
             data.push({
@@ -155,16 +155,16 @@
                 sections: sections
             });
 
-            if(data.length === 0){
+            if(data.length > 0){
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `yt_loop_config.json`;
+                a.click();
+            }else{
                 showStatues("保存できる入力がありません");
-                return;
             }
         });
-        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `yt_loop_config.json`;
-        a.click();
     }
 
     // ファイルを読み込んで入力欄を再生成

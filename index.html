@@ -143,10 +143,22 @@
     function saveConfig() {
         const data = [];
         document.querySelectorAll('.video-unit').forEach(unit => {
+            const url = unit.querySelector('.v-url').value.trim();
+            const sections = unit.querySelector('.v-sections').value.trim();
+
+            if(!url && !sections){
+                showStatues("空のフォームがあります");
+                return;
+            }
             data.push({
-                url: unit.querySelector('.v-url').value,
-                sections: unit.querySelector('.v-sections').value
+                url: url,
+                sections: sections
             });
+
+            if(data.length === 0){
+                showStatues("保存できる入力がありません");
+                return;
+            }
         });
         const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
         const a = document.createElement('a');

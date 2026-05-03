@@ -146,8 +146,8 @@
             const url = unit.querySelector('.v-url').value.trim();
             const sections = unit.querySelector('.v-sections').value.trim();
 
-            if(!url && !sections){
-                showStatues("空のフォームがあります");
+            if(!url || !sections){
+                showStatus("空のフォームがあります");
                 return;
             }
             data.push({
@@ -162,7 +162,7 @@
                 a.download = `yt_loop_config.json`;
                 a.click();
             }else{
-                showStatues("保存できる入力がありません");
+                showStatus("保存できる入力がありません");
             }
         });
     }
